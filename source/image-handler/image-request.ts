@@ -140,6 +140,7 @@ export class ImageRequest {
                             }
                         }).on('error', reject);
                     });
+                    // This catches the higher level error
                 } catch (e) {
                     throw new ImageHandlerError(error.statusCode, error.code, error.message);
                 }
