@@ -200,7 +200,7 @@ describe('process()', () => {
 
     it('Should pass if the proper crop and resize are applied', () => {
       // Arrange
-      const path = '/10x0:100x200/10x20/test-image-001.jpg';
+      const path = '/10x20/10x0:100x200/test-image-001.jpg';
       // Act
       const thumborMapper = new ThumborMapper();
       const edits = thumborMapper.mapPathToEdits(path);
@@ -215,6 +215,7 @@ describe('process()', () => {
             height: 200
           },
           resize: {
+            fit: 'inside',
             width: 10,
             height: 20
           }

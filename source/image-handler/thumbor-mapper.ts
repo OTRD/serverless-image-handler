@@ -16,21 +16,21 @@ export class ThumborMapper {
      * @returns Image edits based on the request path.
      */
     public mapPathToEdits(path: string): ImageEdits {
-        const fileFormat = path.substr(path.lastIndexOf('.') + 1) as ImageFormatTypes;
+        const PATH_REGEX = /(?<=\/)(?<fit>((?:adaptive-|full-)?fit-in)?(?=\/))?\/?(?<resize>(\d+x\d+)(?=\/))?\/?(?<crop>\d+x\d+:\d+x\d+(?=\/))?\/?(?<filters>(filters:[^\/]+\/?)*)\/?(?<smart>smart(?=\/))?/;
+        const matchObject = PATH_REGEX.exec(path);
+        const fileFormat = path.substring(path.lastIndexOf('.') + 1) as ImageFormatTypes;
 
-        let edits: ImageEdits = this.mergeEdits(this.mapCrop(path), this.mapFitIn(path), this.mapSmartCrop(path), this.mapResize(path));
+        let edits: ImageEdits = this.mergeEdits(this.mapCrop(matchObject.groups.crop ?? ''), this.mapFitIn(matchObject.groups.fit ?? ''), this.mapSmartCrop(matchObject.groups.smart ?? ''));
 
         // parse the image path. we have to sort here to make sure that when we have a file name without extension,
         // and `format` and `quality` filters are passed, then the `format` filter will go first to be able
         // to apply the `quality` filter to the target image format.
-        const filters =
-            path
-                .match(/filters:[^)]+/g)
-                ?.map(filter => `${filter})`)
-                .sort() ?? [];
+        const filters = matchObject.groups.filters.split('/').sort();
         for (const filter of filters) {
-            edits = this.mapFilter(filter, fileFormat, edits);
+            edits = this.mapFilter(filter.replace('/', ''), fileFormat, edits);
         }
+
+        edits = this.mergeEdits(edits, this.mapResize(matchObject.groups.resize ?? '', matchObject.groups.smart ?? '', matchObject.groups.crop?? '', matchObject.groups.filters ?? ''));
 
         return edits;
     }
@@ -52,7 +52,7 @@ export class ThumborMapper {
         } else if (REWRITE_SUBSTITUTION === undefined) {
             throw new Error('ThumborMapping::ParseCustomPath::RewriteSubstitutionUndefined');
         } else {
-            let parsedPath = '';
+            let parsedPath;
 
             if (typeof REWRITE_MATCH_PATTERN === 'string') {
                 const patternStrings = REWRITE_MATCH_PATTERN.split('/');
@@ -76,8 +76,8 @@ export class ThumborMapper {
      * @returns Cumulative edits based on the previous edits and the current filter.
      */
     public mapFilter(filterExpression: string, fileFormat: ImageFormatTypes, previousEdits: ImageEdits = {}): ImageEdits {
-        const matched = filterExpression.match(/:(.+)\((.*)\)/);
-        const [_, filterName, filterValue] = matched;
+        const filter = filterExpression.replace('filters:', '').replace(')', '');
+        const [filterName, filterValue] = filter.split('(');
         const currentEdits = {...previousEdits};
 
         // Find the proper filter
@@ -136,6 +136,10 @@ export class ThumborMapper {
 
                 currentEdits.resize.fit = ImageFitTypes.CONTAIN;
                 currentEdits.resize.background = Color(color).object();
+                break;
+            }
+            case 'focal': {
+                currentEdits.crop = this.mapCrop(filterValue).crop;
                 break;
             }
             case 'format': {
@@ -265,20 +269,17 @@ export class ThumborMapper {
 
     /**
      * Maps the image path to crop image edit.
-     * @param path an image path.
+     * @param crop crop dimensions
      * @returns image edits associated with crop.
      */
-    private mapCrop(path: string): ImageEdits {
-        const pathCropMatchResult = path.match(/\d+x\d+:\d+x\d+/g);
-
-        if (pathCropMatchResult) {
-            const [leftTopPoint, rightBottomPoint] = pathCropMatchResult[0].split(':');
-
+    private mapCrop(crop: string): ImageEdits {
+        if (crop !== '') {
+            const [leftTopPoint, rightBottomPoint] = crop.split(':');
             const [leftTopX, leftTopY] = leftTopPoint.split('x').map(x => parseInt(x, 10));
             const [rightBottomX, rightBottomY] = rightBottomPoint.split('x').map(x => parseInt(x, 10));
 
             if (!isNaN(leftTopX) && !isNaN(leftTopY) && !isNaN(rightBottomX) && !isNaN(rightBottomY)) {
-                const cropEdit: ImageEdits = {
+                return {
                     crop: {
                         left: leftTopX,
                         top: leftTopY,
@@ -286,8 +287,6 @@ export class ThumborMapper {
                         height: rightBottomY - leftTopY
                     }
                 };
-
-                return cropEdit;
             }
         }
 
@@ -296,11 +295,11 @@ export class ThumborMapper {
 
     /**
      * Allows the use of smart cropping.
-     * @param path An image path.
+     * @param smart Whether to use smart cropping.
      * @returns Image edits associated with smart cropping.
      */
-    private mapSmartCrop(path: string) {
-        const pathSmartMatchResult = path.match(/(?<=\/)smart\//g);
+    private mapSmartCrop(smart: string) {
+        const pathSmartMatchResult = smart === 'smart';
         if (pathSmartMatchResult) {
             return {smartCrop: true};
         }
@@ -309,30 +308,33 @@ export class ThumborMapper {
 
     /**
      * Maps the image path to resize image edit.
-     * @param path An image path.
+     * @param resize Desired image dimensions.
+     * @param position Optional position to focus.
+     * @param crop Optional crop points.
+     * @param filters Optional filters to check for focal points.
      * @returns Image edits associated with resize.
      */
-    private mapResize(path: string): ImageEdits {
+    private mapResize(resize: string, position: string, crop: string, filters: string): ImageEdits {
         let resizeEdit: {[k: string]: any} = {resize: {}};
         let isValid = false;
 
         // Process the dimensions
-        const dimensionsMatchResult = path.match(/\/((\d+x\d+)|(0x\d+))\//g);
-        const positionMatchResult = path.match(/position\(.*\)/g);
+        const dimensionsMatchResult = resize.match(/\d+x\d+/);
+        const positionMatchResult = position.match(/position\(.*\)/);
 
         if (dimensionsMatchResult) {
             // Assign dimensions from the first match only to avoid parsing dimension from image file names
             const [width, height] = dimensionsMatchResult[0]
-                .replace(/\//g, '')
                 .split('x')
                 .map(x => parseInt(x));
 
             // Set only if the dimensions provided are valid
             if (!isNaN(width) && !isNaN(height)) {
                 // If width or height is 0, fit would be inside.
-                if (width === 0 || height === 0) {
+                if (width === 0 || height === 0 || crop !== '' || filters.includes('focal(')) {
                     resizeEdit.resize.fit = ImageFitTypes.INSIDE;
                 }
+
                 resizeEdit.resize.width = width === 0 ? null : width;
                 resizeEdit.resize.height = height === 0 ? null : height;
 
@@ -350,11 +352,11 @@ export class ThumborMapper {
 
     /**
      * Maps the image path to fit image edit.
-     * @param path An image path.
+     * @param fit Fit-In to convert.
      * @returns Image edits associated with fit-in filter.
      */
-    private mapFitIn(path: string): ImageEdits {
-        return path.includes('fit-in') ? {resize: {fit: ImageFitTypes.INSIDE}} : ThumborMapper.EMPTY_IMAGE_EDITS;
+    private mapFitIn(fit: string): ImageEdits {
+        return fit.includes('fit-in') ? {resize: {fit: ImageFitTypes.INSIDE}} : ThumborMapper.EMPTY_IMAGE_EDITS;
     }
 
     /**
