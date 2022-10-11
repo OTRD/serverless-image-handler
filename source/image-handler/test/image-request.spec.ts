@@ -1375,7 +1375,7 @@ describe('parseImageKey()', () => {
 
     it('Should pass if an image key value is provided in the thumbor request and the path has crop and resize filters', () => {
       // Arrange
-      const event = { path: '/10x20:100x200/10x10/filters:rotate(90)/filters:grayscale()/thumbor-image (1) suffix.jpg' };
+      const event = { path: '/10x10/10x20:100x200/filters:rotate(90)/filters:grayscale()/thumbor-image (1) suffix.jpg' };
 
       // Act
       const imageRequest = new ImageRequest(s3Client, secretProvider);
