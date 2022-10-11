@@ -286,7 +286,7 @@ export class ImageRequest {
                 }
             }
 
-            return decodeURIComponent(path.replace(/(?<=\/)(?<fit>((?:adaptive-|full-)?fit-in)?(?=\/))?\/?(?<resize>(\d+x\d+)(?=\/))?\/?(?<crop>\d+x\d+:\d+x\d+(?=\/))?\/?(?<filters>(filters:[^\/]+\/?)*)\/?(?<smart>smart(?=\/))?/, '').replace(/^\/+/, ''));
+            return decodeURIComponent(path.replace(/\/?((?:adaptive-|full-)?fit-in\/)?(\d+x\d+\/)?(\d+x\d+:\d+x\d+\/)?(filters:[^\/.]+\/?\/)*(smart\/)?/, '').replace(/^\/+/, ''));
         }
 
         // Return an error for all other conditions
