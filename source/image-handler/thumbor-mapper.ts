@@ -30,7 +30,7 @@ export class ThumborMapper {
             edits = this.mapFilter(filter.replace('/', ''), fileFormat, edits);
         }
 
-        edits = this.mergeEdits(edits, this.mapResize(matchObject.groups.resize ?? '', matchObject.groups.smart ?? '', matchObject.groups.crop?? '', matchObject.groups.filters ?? ''));
+        edits = this.mergeEdits(edits, this.mapResize(matchObject.groups.resize ?? '', matchObject.groups.smart ?? '', matchObject.groups.crop ?? '', matchObject.groups.filters ?? ''));
 
         return edits;
     }
@@ -139,7 +139,17 @@ export class ThumborMapper {
                 break;
             }
             case 'focal': {
-                currentEdits.crop = this.mapCrop(filterValue).crop;
+                let width = 0;
+                let height = 0;
+                if (currentEdits.resize !== undefined) {
+                    if (currentEdits.resize.width !== undefined && currentEdits.resize.width !== 0) {
+                        width = currentEdits.resize.width;
+                    }
+                    if (currentEdits.resize.height !== undefined && currentEdits.resize.height !== 0) {
+                        height = currentEdits.resize.height;
+                    }
+                }
+                currentEdits.crop = this.mapFocal(filterValue, width, height).crop;
                 break;
             }
             case 'format': {
@@ -285,6 +295,35 @@ export class ThumborMapper {
                         top: leftTopY,
                         width: rightBottomX - leftTopX,
                         height: rightBottomY - leftTopY
+                    }
+                };
+            }
+        }
+
+        return ThumborMapper.EMPTY_IMAGE_EDITS;
+    }
+
+    private mapFocal(focal: string, width: number, height: number): ImageEdits {
+        if (focal !== '') {
+            const [leftTopPoint, rightBottomPoint] = focal.split(':');
+            const [leftTopX, leftTopY] = leftTopPoint.split('x').map(x => parseInt(x, 10));
+            const [rightBottomX, rightBottomY] = rightBottomPoint.split('x').map(x => parseInt(x, 10));
+
+            if (!isNaN(leftTopX) && !isNaN(leftTopY) && !isNaN(rightBottomX) && !isNaN(rightBottomY)) {
+                let widthCenter = (rightBottomX - leftTopX) / 2;
+                let heightCenter = (rightBottomY - leftTopY) / 2;
+                if (width === 0) {
+                    width = rightBottomX - leftTopX;
+                }
+                if (height === 0) {
+                    height = rightBottomY - leftTopY;
+                }
+                return {
+                    crop: {
+                        left: widthCenter - (width / 2),
+                        top: heightCenter - (height / 2),
+                        width: width,
+                        height: height
                     }
                 };
             }
