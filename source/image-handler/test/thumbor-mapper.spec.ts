@@ -215,7 +215,31 @@ describe('process()', () => {
             height: 200
           },
           resize: {
-            fit: 'inside',
+            width: 10,
+            height: 20
+          }
+        }
+      };
+      expect(edits).toEqual(expectedResult.edits);
+    });
+
+    it('Should pass if the proper focal points and resize are applied', () => {
+      // Arrange
+      const path = '/10x20/filters:focal(10x0:100x200)/test-image-001.jpg';
+      // Act
+      const thumborMapper = new ThumborMapper();
+      const edits = thumborMapper.mapPathToEdits(path);
+
+      // Assert
+      const expectedResult = {
+        edits: {
+          crop: {
+            left: 50,
+            top: 90,
+            width: 10,
+            height: 20
+          },
+          resize: {
             width: 10,
             height: 20
           }

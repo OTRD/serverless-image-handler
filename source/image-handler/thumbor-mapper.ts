@@ -27,10 +27,10 @@ export class ThumborMapper {
         // to apply the `quality` filter to the target image format.
         const filters = matchObject.groups.filters.split('/').sort();
         for (const filter of filters) {
-            edits = this.mapFilter(filter.replace('/', ''), fileFormat, edits);
+            edits = this.mapFilter(filter.replace('/', ''), fileFormat, edits, matchObject.groups.resize ?? '');
         }
 
-        edits = this.mergeEdits(edits, this.mapResize(matchObject.groups.resize ?? '', matchObject.groups.smart ?? '', matchObject.groups.crop ?? '', matchObject.groups.filters ?? ''));
+        edits = this.mergeEdits(edits, this.mapResize(matchObject.groups.resize ?? '', matchObject.groups.smart ?? ''));
 
         return edits;
     }
@@ -73,9 +73,10 @@ export class ThumborMapper {
      * @param filterExpression The URL path filter.
      * @param fileFormat The file type of the original image.
      * @param previousEdits Cumulative edit, to take into account the previous filters, i.g. `stretch` uses `resize.fit` to make a right update.
+     * @param resize
      * @returns Cumulative edits based on the previous edits and the current filter.
      */
-    public mapFilter(filterExpression: string, fileFormat: ImageFormatTypes, previousEdits: ImageEdits = {}): ImageEdits {
+    public mapFilter(filterExpression: string, fileFormat: ImageFormatTypes, previousEdits: ImageEdits = {}, resize: string = ''): ImageEdits {
         const filter = filterExpression.replace('filters:', '').replace(')', '');
         const [filterName, filterValue] = filter.split('(');
         const currentEdits = {...previousEdits};
@@ -148,6 +149,8 @@ export class ThumborMapper {
                     if (currentEdits.resize.height !== undefined && currentEdits.resize.height !== 0) {
                         height = currentEdits.resize.height;
                     }
+                } else if (resize !== undefined && resize !== '') {
+                    [width, height] = resize.split('x').map(x => parseInt(x));
                 }
                 currentEdits.crop = this.mapFocal(filterValue, width, height).crop;
                 break;
@@ -310,8 +313,8 @@ export class ThumborMapper {
             const [rightBottomX, rightBottomY] = rightBottomPoint.split('x').map(x => parseInt(x, 10));
 
             if (!isNaN(leftTopX) && !isNaN(leftTopY) && !isNaN(rightBottomX) && !isNaN(rightBottomY)) {
-                let widthCenter = (rightBottomX - leftTopX) / 2;
-                let heightCenter = (rightBottomY - leftTopY) / 2;
+                let widthCenter = (rightBottomX + leftTopX) / 2;
+                let heightCenter = (rightBottomY + leftTopY) / 2;
                 if (width === 0) {
                     width = rightBottomX - leftTopX;
                 }
@@ -349,11 +352,9 @@ export class ThumborMapper {
      * Maps the image path to resize image edit.
      * @param resize Desired image dimensions.
      * @param position Optional position to focus.
-     * @param crop Optional crop points.
-     * @param filters Optional filters to check for focal points.
      * @returns Image edits associated with resize.
      */
-    private mapResize(resize: string, position: string, crop: string, filters: string): ImageEdits {
+    private mapResize(resize: string, position: string): ImageEdits {
         let resizeEdit: {[k: string]: any} = {resize: {}};
         let isValid = false;
 
@@ -370,7 +371,7 @@ export class ThumborMapper {
             // Set only if the dimensions provided are valid
             if (!isNaN(width) && !isNaN(height)) {
                 // If width or height is 0, fit would be inside.
-                if (width === 0 || height === 0 || crop !== '' || filters.includes('focal(')) {
+                if (width === 0 || height === 0) {
                     resizeEdit.resize.fit = ImageFitTypes.INSIDE;
                 }
 
